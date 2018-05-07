@@ -6,6 +6,9 @@ add_definitions(-std=c++11)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   can_msgs
+  geometry_msgs
+  std_msgs
+
 )
 
 catkin_package(
@@ -24,14 +27,13 @@ add_library(ros_linuxcan
   src/utils.cpp
 )
 
-target_link_libraries(ros_linuxcan
+target_link_libraries(ros_linuxcan 
   canlib
   ${catkin_LIBRARIES}
 )
 
-add_executable(kvaser_can_bridge
-  src/kvaser_can_bridge.cpp
-)
+add_executable(kvaser_can_bridge 
+  src/kvaser_can_bridge.cpp)
 
 target_link_libraries(kvaser_can_bridge
   ros_linuxcan

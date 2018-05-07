@@ -1,16 +1,11 @@
-/*
-* Unpublished Copyright (c) 2009-2017 AutonomouStuff, LLC, All Rights Reserved.
-*
-* This file is part of the Kvaser ROS 1.0 driver which is released under the MIT license.
-* See file LICENSE included with this software or go to https://opensource.org/licenses/MIT for full license details.
-*/
-
 #include <thread>
 #include <mutex>
 #include <chrono>
-
+#include "std_msgs/String.h"
+#include <std_msgs/Float64.h>
 #include <ros/ros.h>
 #include <kvaser_interface.h>
+#include <geometry_msgs/Twist.h>
 #include <can_msgs/Frame.h>
 
 using namespace AS::CAN;
@@ -20,8 +15,14 @@ int hardware_id = 0;
 int circuit_id = 0;
 bool global_keep_going = true;
 std::mutex keep_going_mut;
+//std_msgs:: Float64 Fmsg;
+//std_msgs:: Float64 Fmsg1;
 KvaserCan can_reader, can_writer;
 ros::Publisher can_tx_pub;
+ros::Publisher can_tx_pub2;
+ros::Publisher can_st;
+ros::Publisher can_st1;
+
 
 void can_read()
 {
@@ -57,22 +58,45 @@ void can_read()
     {
       while ((ret = can_reader.read(&id, msg, &size, &extended, &t)) == OK)
       {
-        can_msgs::Frame can_pub_msg;
-        can_pub_msg.header.frame_id = "0";
+
+
+
+        can_msgs::Frame can_pub_msg2;
+can_pub_msg2.header.frame_id = "0";
+        can_pub_msg2.id = id;
+        can_pub_msg2.dlc = size;
+	std::copy(msg, msg + 8, can_pub_msg2.data.begin());
+        can_tx_pub2.publish(can_pub_msg2);
+
+
+	//Publish steering angle in separate topic
+	if (id==688)
+	{
+	can_msgs::Frame can_pub_msg;
+	std_msgs::Float64 Fmsg,Fmsg1;
+	
+	can_pub_msg.header.frame_id = "0";
         can_pub_msg.id = id;
         can_pub_msg.dlc = size;
-        std::copy(msg, msg + 8, can_pub_msg.data.begin());
-        can_pub_msg.header.stamp = ros::Time::now();
+	std::copy(msg, msg+2, can_pub_msg.data.begin());
         can_tx_pub.publish(can_pub_msg);
-      }
+	//std::copy(Fmsg, msg+2, can_pub_msg.data.begin());	
+	//std::copy(msg, msg+1, Fmsg);
+	Fmsg.data = msg[0];
+	Fmsg1.data = msg[1];
+ 	can_st.publish(Fmsg);
+	can_st1.publish(Fmsg1);
+	}
 
+
+      }
+ 
       if (ret != NO_MESSAGES_RECEIVED)
         ROS_WARN_THROTTLE(0.5, "Kvaser CAN Interface - Error reading CAN message: %d - %s", ret, return_status_desc(ret).c_str());
     }
 
     std::this_thread::sleep_until(next_time);
 
-    //Set local to global immediately before next loop.
     keep_going_mut.lock();
     keep_going = global_keep_going;
     keep_going_mut.unlock();
@@ -93,7 +117,6 @@ void can_rx_callback(const can_msgs::Frame::ConstPtr& msg)
 
   if (!can_writer.is_open())
   {
-    // Open the channel.
     ret = can_writer.open(hardware_id, circuit_id, bit_rate, false);
 
     if (ret != OK)
@@ -117,12 +140,16 @@ int main(int argc, char** argv)
 
   // ROS initialization
   ros::init(argc, argv, "kvaser_can_bridge");
-  ros::NodeHandle n;
+  ros::NodeHandle n;ros::NodeHandle node;
+  ros::NodeHandle nh,n1;
+
   ros::NodeHandle priv("~");
   ros::AsyncSpinner spinner(1);
 
-  can_tx_pub = n.advertise<can_msgs::Frame>("can_tx", 500);
-
+  can_tx_pub = n.advertise<can_msgs::Frame>("steering_angle", 500);
+  can_tx_pub2 = node.advertise<can_msgs::Frame>("can_msgs", 500);
+  can_st = n1.advertise<std_msgs::Float64>("can_st_bit1", 500);
+  can_st1 = nh.advertise<std_msgs::Float64>("can_st_bit2", 500);
   ros::Subscriber can_rx_sub = n.subscribe("can_rx", 500, can_rx_callback);
 
   // Wait for time to be valid
